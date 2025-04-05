@@ -232,14 +232,22 @@ export default class MyPlugin extends Plugin {
 				// Don't mark as included if read error
 			}
 		} else {
-			noteOutput = `\n## ${titlePrefix}: ${file.basename}${depthString}\n\n*Note content skipped (Filters).*\n\n---\n`;
+			// Filters don't pass
 			console.log(
 				`[Depth ${depth}] Skipped Content: ${file.basename} (Filters)`
 			);
+			if (isSourceNote) {
+				// Special case: Add skipped message ONLY for the source note
+				noteOutput = `\n## ${titlePrefix}: ${file.basename}${depthString}\n\n*Note content skipped (Filters).*\n\n---\n`;
+			}
+			// For linked notes that fail filters, noteOutput remains empty
 		}
 
-		combinedContentRef.content += noteOutput;
-		return passesFilters; // Return if it passed filters, regardless of read errors
+		// Only add output if it was generated (i.e., passed filters, had a read error, or was the source note skipped)
+		if (noteOutput) {
+			combinedContentRef.content += noteOutput;
+		}
+		return passesFilters; // Return if it passed filters, regardless of read errors or empty output
 	}
 
 	// --- CORE LOGIC: Unified Function ---
