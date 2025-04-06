@@ -28,6 +28,7 @@ This plugin for Obsidian fetches context from your notes by traversing outgoing 
 3.  **Run the Command:**
     -   Open the Command Palette (Cmd/Ctrl + P).
     -   Search for and select "My Context Fetcher: Create Context File (Links filtered by Privacy & Optional Tags)".
+    -   **Alternatively:** Go to the plugin settings (Settings -> Community Plugins -> My Context Fetcher) and click the "Create Context File Now" button at the bottom of the settings page. This uses the currently saved settings.
 4.  **Check the Output:**
     -   A new Markdown file will be created in your specified `Export Folder Name` (or the vault root if the folder name is empty).
     -   The file name will be timestamped and include the source note's name and optionally the tags used for filtering (e.g., `Context-MySourceNote-Tags-project-a-important-20250406-135600.md`).

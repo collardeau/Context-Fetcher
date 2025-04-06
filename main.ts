@@ -601,5 +601,35 @@ class ContextSettingTab extends PluginSettingTab {
 						}
 					})
 			);
+
+		// Add Button to trigger context creation
+		new Setting(containerEl)
+			.setName("Run Context Creation")
+			.setDesc(
+				"Manually trigger the 'Create Context File' command using the current settings."
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Create Context File Now")
+					.setCta() // Makes the button more prominent
+					.onClick(async () => {
+						new Notice("Triggering context file creation...");
+						try {
+							// Use the fully qualified command ID (cast app to any)
+							await (this.app as any).commands.executeCommandById(
+								`my-context-fetcher:create-context-file`
+							);
+							// Note: The command itself handles success/error notices.
+						} catch (error) {
+							console.error(
+								"Error executing command from settings:",
+								error
+							);
+							new Notice(
+								"Failed to trigger context creation command. See console."
+							);
+						}
+					})
+			);
 	}
 } // End of ContextSettingTab class
