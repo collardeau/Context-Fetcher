@@ -1,94 +1,70 @@
-# Obsidian Sample Plugin
+# My Context Fetcher - Obsidian Plugin
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+**Author:** Thomas Collardeau ([tonton.dev](https://tonton.dev))
+**Version:** 1.0.0
+**Minimum Obsidian Version:** 0.15.0
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## Description
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+This plugin for Obsidian fetches context from your notes by traversing outgoing links from the currently active note. It filters the notes based on `privacy` frontmatter values and optional tags, then compiles the content of the matching notes into a single export file. This is useful for creating a consolidated view of related information based on specific criteria.
 
-## First time developing plugins?
+## Features
 
-Quick starting guide for new plugin devs:
+-   **Context Export Command:** Creates a new Markdown file containing the content of the active note and its linked notes (up to a configurable depth).
+-   **Flexible Filtering:**
+    -   **Privacy:** Include notes based on the value of a `privacy` key in their frontmatter (e.g., `privacy: public`). You can specify multiple allowed values and include notes _without_ a privacy key by adding `none` to the list.
+    -   **Tags:** Optionally require included notes to have at least one specific tag. This works in conjunction with the privacy filter.
+-   **Link Depth Control:** Configure how many levels of links the plugin should follow from the source note.
+-   **Customizable Export Folder:** Choose where the generated context files are saved.
+-   **Settings Tab:** Easily configure all options through the Obsidian settings panel.
+-   **Ribbon Icon:** Quick access to the plugin's settings.
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+## How to Use
 
-## Releasing new releases
+1.  **Configure Settings (Optional):**
+    -   Go to Obsidian Settings -> Community Plugins -> My Context Fetcher.
+    -   Adjust the `Export Folder Name`, `Include Privacy Levels`, `Required Tags`, and `Link Depth` as needed (see Settings Explained below).
+2.  **Open a Source Note:** Navigate to the Markdown note you want to start the context fetching from.
+3.  **Run the Command:**
+    -   Open the Command Palette (Cmd/Ctrl + P).
+    -   Search for and select "My Context Fetcher: Create Context File (Links filtered by Privacy & Optional Tags)".
+4.  **Check the Output:**
+    -   A new Markdown file will be created in your specified `Export Folder Name` (or the vault root if the folder name is empty).
+    -   The file name will be timestamped and include the source note's name and optionally the tags used for filtering (e.g., `Context-MySourceNote-Tags-project-a-important-20250406-135600.md`).
+    -   This file will contain the filtered content from the source note and its linked notes.
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+## Settings Explained
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+-   **Export Folder Name:**
+    -   The name of the folder within your vault where the context files will be saved.
+    -   If left empty, files will be saved in the root of your vault.
+    -   Example: `ContextExports`
+-   **Include Privacy Levels:**
+    -   A comma-separated list of values for the `privacy` key in note frontmatter. Only notes with a matching privacy value will have their _content_ included.
+    -   Case-insensitive.
+    -   Add the special value `none` to include notes that _do not_ have a `privacy` key in their frontmatter.
+    -   Example: `public, internal, none`
+-   **Required Tags (Optional):**
+    -   A comma-separated list of tags (without the leading `#`).
+    -   If tags are listed here, _all_ included notes (source and linked) must have at least _one_ of these tags _in addition to_ matching the privacy level filter.
+    -   Leave empty to only filter based on the `privacy` level.
+    -   Example: `project-x, important-client`
+-   **Link Depth:**
+    -   Determines how many levels of outgoing links to follow from the active note.
+    -   `1` means only include the active note and notes directly linked from it.
+    -   `2` means include the active note, its direct links, and the notes linked from _those_ notes, and so on.
+    -   Notes at _all_ levels must pass the privacy and tag filters for their content to be included in the export file.
+    -   Must be 1 or greater.
 
-## Adding your plugin to the community plugin list
+## Installation
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+1.  Ensure Community Plugins are enabled in Obsidian settings (Settings -> Community Plugins -> Turn on Community plugins).
+2.  Browse Community Plugins and search for "My Context Fetcher".
+3.  Click "Install".
+4.  Click "Enable".
 
-## How to use
+Alternatively, use the BRAT plugin to install using the repository URL (if available) or manually install by downloading the latest release files (`main.js`, `manifest.json`, `styles.css`) and placing them in your vault's plugin folder (`YourVault/.obsidian/plugins/my-context-fetcher/`).
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+## License
 
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
-```
-
-If you have multiple URLs, you can also do:
-
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
-
-## API Documentation
-
-See https://github.com/obsidianmd/obsidian-api
+[MIT License](LICENSE)
