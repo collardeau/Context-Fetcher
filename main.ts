@@ -17,12 +17,16 @@ interface MyPluginSettings {
 	includePrivacyLevels: string[];
 	linkDepth: number;
 	targetTags: string[];
+	includeRecentDailyNotes: boolean; // New setting
+	numberOfRecentDays: number; // New setting
 }
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	exportFolderName: "ContextExports",
 	includePrivacyLevels: ["public"],
 	linkDepth: 1,
 	targetTags: [],
+	includeRecentDailyNotes: false, // Default value
+	numberOfRecentDays: 3, // Default value
 };
 
 export default class MyPlugin extends Plugin {
@@ -93,6 +97,13 @@ export default class MyPlugin extends Plugin {
 					: ""
 			)
 			.filter((t) => t.length > 0);
+		// Normalize new settings
+		this.settings.includeRecentDailyNotes =
+			!!this.settings.includeRecentDailyNotes; // Ensure boolean
+		this.settings.numberOfRecentDays = Math.max(
+			1,
+			Math.floor(this.settings.numberOfRecentDays) || 1
+		); // Ensure >= 1 integer
 		console.log(
 			"[Settings] Loaded and normalized:",
 			JSON.stringify(this.settings)
@@ -117,6 +128,13 @@ export default class MyPlugin extends Plugin {
 					: ""
 			)
 			.filter((t) => t.length > 0);
+		// Normalize new settings before saving
+		this.settings.includeRecentDailyNotes =
+			!!this.settings.includeRecentDailyNotes; // Ensure boolean
+		this.settings.numberOfRecentDays = Math.max(
+			1,
+			Math.floor(this.settings.numberOfRecentDays) || 1
+		); // Ensure >= 1 integer
 
 		console.log(
 			"[Settings] Saving clamped/normalized settings:",
@@ -205,7 +223,38 @@ export default class MyPlugin extends Plugin {
 		return true;
 	}
 
-	// --- Helper: Process Single Note ---
+	// --- Helper: Check ONLY Privacy Filter ---
+	private passesPrivacyFilter(
+		file: TFile,
+		cache: CachedMetadata | null
+	): boolean {
+		if (!cache) return false;
+		const frontmatter = cache.frontmatter;
+		const privacyRaw = parseFrontMatterEntry(frontmatter, "privacy");
+		const privacyValue =
+			typeof privacyRaw === "string"
+				? privacyRaw.trim().toLowerCase()
+				: undefined;
+		const allowedPrivacyLevels = this.settings.includePrivacyLevels;
+
+		// Check Privacy Level
+		if (privacyValue && allowedPrivacyLevels.includes(privacyValue)) {
+			return true;
+		} else if (!privacyValue && allowedPrivacyLevels.includes("none")) {
+			// Include notes with NO privacy key if 'none' is specified
+			return true;
+		} else if (
+			privacyRaw === null &&
+			allowedPrivacyLevels.includes("none")
+		) {
+			// Also handle explicitly null privacy if 'none' is specified (YAML null)
+			return true;
+		}
+
+		return false; // Failed privacy filter
+	}
+
+	// --- Helper: Process Single Note (Used for BFS traversal) ---
 	private async processAndAddNoteContent(
 		file: TFile,
 		depth: number,
@@ -305,6 +354,13 @@ export default class MyPlugin extends Plugin {
 		combinedContentObj.content += `* Required Tags for Inclusion: ${
 			checkTags ? targetTags.map((t) => `#${t}`).join(", ") : "None"
 		}\n`;
+		// Add new settings to header
+		combinedContentObj.content += `* Include Recent Daily Notes: ${
+			this.settings.includeRecentDailyNotes ? "Yes" : "No"
+		}\n`;
+		if (this.settings.includeRecentDailyNotes) {
+			combinedContentObj.content += `* Number of Recent Days: ${this.settings.numberOfRecentDays}\n`;
+		}
 		combinedContentObj.content += `\n---\n`;
 
 		const contentIncludedPaths = new Set<string>(); // Tracks paths whose *content* has been added
@@ -421,9 +477,110 @@ export default class MyPlugin extends Plugin {
 			}
 		} // End BFS while loop
 
+		console.log(
+			`[BFS End] Traversal complete. Iterations: ${iteration}. Processed ${processedLinkCandidates} link candidates (${traversalVisitedPaths.size} unique nodes visited for traversal), included content from ${includedNotesCount} notes via BFS.`
+		);
+
+		// --- Part 3: Process Recent Daily Notes (If Enabled) ---
+		if (this.settings.includeRecentDailyNotes) {
+			console.log("[Daily Notes] Processing recent daily notes...");
+			combinedContentObj.content += `\n## Recent Daily Notes (Up to ${this.settings.numberOfRecentDays} days):\n`;
+			let dailyNotesAddedCount = 0;
+			try {
+				const allMarkdownFiles = this.app.vault.getMarkdownFiles();
+				const dailyNoteRegex = /^\d{4}-\d{2}-\d{2}\.md$/; // YYYY-MM-DD.md
+
+				const potentialDailyNotes = allMarkdownFiles
+					.filter((file) => {
+						// Check filename format
+						if (!dailyNoteRegex.test(file.name)) {
+							return false;
+						}
+						// Check for #daily tag
+						const cache = this.app.metadataCache.getFileCache(file);
+						if (!cache) return false;
+						const tags = getAllTags(cache) ?? [];
+						return tags.some((tag) =>
+							tag.toLowerCase().startsWith("#daily")
+						);
+					})
+					.sort((a, b) => {
+						// Sort by filename (date) descending
+						return b.basename.localeCompare(a.basename);
+					});
+
+				const recentDaysToInclude = this.settings.numberOfRecentDays;
+				const dailyNotesToProcess = potentialDailyNotes.slice(
+					0,
+					recentDaysToInclude
+				);
+
+				console.log(
+					`[Daily Notes] Found ${potentialDailyNotes.length} potential daily notes. Processing the latest ${dailyNotesToProcess.length}.`
+				);
+
+				for (const dailyFile of dailyNotesToProcess) {
+					if (contentIncludedPaths.has(dailyFile.path)) {
+						console.log(
+							`[Daily Notes] Skipping ${dailyFile.basename} (already included via BFS).`
+						);
+						continue; // Already included via BFS, skip processing
+					}
+
+					const cache =
+						this.app.metadataCache.getFileCache(dailyFile);
+					if (this.passesPrivacyFilter(dailyFile, cache)) {
+						try {
+							const fullContent = await this.app.vault.read(
+								dailyFile
+							);
+							const truncatedContent =
+								this.truncateContentAfterFirstSeparator(
+									fullContent
+								);
+							const cleanedContent =
+								this.removeWikiLinks(truncatedContent);
+							const noteOutput = `\n## Daily Note: ${dailyFile.basename}\n\n### Content:\n${cleanedContent}\n\n---\n`;
+							combinedContentObj.content += noteOutput;
+							contentIncludedPaths.add(dailyFile.path); // Mark as included
+							dailyNotesAddedCount++;
+							includedNotesCount++; // Increment total count
+							console.log(
+								`[Daily Notes] Included Content: ${dailyFile.basename}`
+							);
+						} catch (err) {
+							console.error(
+								`[Daily Notes] Error reading file ${dailyFile.path}:`,
+								err
+							);
+							combinedContentObj.content += `\n## Daily Note: ${dailyFile.basename}\n\n*Error reading file content.*\n\n---\n`;
+						}
+					} else {
+						console.log(
+							`[Daily Notes] Skipped Content: ${dailyFile.basename} (Privacy Filter)`
+						);
+						// Optionally add a skipped message, but might be too verbose
+						// combinedContentObj.content += `\n## Daily Note: ${dailyFile.basename}\n\n*Note content skipped (Privacy Filter).*\n\n---\n`;
+					}
+				} // End loop through daily notes
+
+				if (dailyNotesAddedCount === 0) {
+					combinedContentObj.content +=
+						"\n*No recent daily notes matching the privacy filter were found or added.*\n\n---\n";
+				}
+			} catch (error) {
+				console.error(
+					"[Daily Notes] Error processing daily notes:",
+					error
+				);
+				combinedContentObj.content +=
+					"\n*An error occurred while processing recent daily notes.*\n\n---\n";
+			}
+		} // End if includeRecentDailyNotes
+
 		// --- Final Output Generation ---
 		console.log(
-			`[BFS End] Traversal complete. Iterations: ${iteration}. Processed ${processedLinkCandidates} link candidates (${traversalVisitedPaths.size} unique nodes visited for traversal), included content from ${includedNotesCount} total notes.`
+			`[End] Processing complete. Included content from ${includedNotesCount} total notes.`
 		);
 
 		// Add summary messages
@@ -770,6 +927,80 @@ class ContextSettingTab extends PluginSettingTab {
 						}
 					})
 			);
+
+		// --- Daily Notes Settings ---
+		containerEl.createEl("h3", { text: "Recent Daily Notes" });
+
+		new Setting(containerEl)
+			.setName("Include Recent Daily Notes")
+			.setDesc(
+				"If enabled, automatically include content from the most recent daily notes (tagged #daily) that pass the privacy filter (tags are ignored for this specific inclusion)."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.includeRecentDailyNotes)
+					.onChange(async (value) => {
+						this.plugin.settings.includeRecentDailyNotes = value;
+						await this.plugin.saveSettings();
+						// Redraw settings to show/hide the number input
+						this.display();
+						this.updatePreviewStatus(); // Also update preview status
+					})
+			);
+
+		// Number of Recent Days (conditionally displayed)
+		const recentDaysSetting = new Setting(containerEl)
+			.setName("Number of recent days to include")
+			.setDesc(
+				"How many of the most recent daily notes (YYYY-MM-DD.md with #daily tag) to check and potentially include."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("3")
+					.setValue(
+						this.plugin.settings.numberOfRecentDays.toString()
+					)
+					.onChange(async (value) => {
+						let changed = false;
+						if (value.trim() === "") {
+							return; // Ignore empty input while typing
+						}
+						const days = parseInt(value.trim(), 10);
+						if (
+							!isNaN(days) &&
+							days >= 1 &&
+							Number.isInteger(days)
+						) {
+							if (
+								this.plugin.settings.numberOfRecentDays !== days
+							) {
+								this.plugin.settings.numberOfRecentDays = days;
+								await this.plugin.saveSettings();
+								changed = true;
+							}
+						} else {
+							if (
+								text.getValue() !==
+								this.plugin.settings.numberOfRecentDays.toString()
+							) {
+								text.setValue(
+									this.plugin.settings.numberOfRecentDays.toString()
+								);
+								console.warn(
+									`Invalid days input "${value}", reverting to ${this.plugin.settings.numberOfRecentDays}`
+								);
+							}
+						}
+						if (changed) {
+							this.updatePreviewStatus(); // Update preview if value changed
+						}
+					})
+			);
+
+		// Hide the number input if the toggle is off
+		if (!this.plugin.settings.includeRecentDailyNotes) {
+			recentDaysSetting.settingEl.style.display = "none";
+		}
 
 		// --- Preview Section ---
 		containerEl.createEl("h3", { text: "Preview Included Notes" });
