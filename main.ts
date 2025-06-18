@@ -17,6 +17,7 @@ interface MyPluginSettings {
 	includePrivacyLevels: string[];
 	linkDepth: number;
 	targetTags: string[];
+	excludedTags: string[]; // New setting for excluded tags
 	includeRecentDailyNotes: boolean; // New setting
 	numberOfRecentDays: number; // New setting
 }
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	includePrivacyLevels: ["public"],
 	linkDepth: 1,
 	targetTags: [],
+	excludedTags: [], // Default value for excluded tags
 	includeRecentDailyNotes: false, // Default value
 	numberOfRecentDays: 3, // Default value
 };
@@ -97,6 +99,13 @@ export default class MyPlugin extends Plugin {
 					: ""
 			)
 			.filter((t) => t.length > 0);
+		this.settings.excludedTags = (this.settings.excludedTags || [])
+			.map((t) =>
+				typeof t === "string"
+					? t.trim().toLowerCase().replace(/^#/, "")
+					: ""
+			)
+			.filter((t) => t.length > 0);
 		// Normalize new settings
 		this.settings.includeRecentDailyNotes =
 			!!this.settings.includeRecentDailyNotes; // Ensure boolean
@@ -122,6 +131,13 @@ export default class MyPlugin extends Plugin {
 			.map((p) => (typeof p === "string" ? p.trim().toLowerCase() : ""))
 			.filter((p) => p.length > 0);
 		this.settings.targetTags = (this.settings.targetTags || [])
+			.map((t) =>
+				typeof t === "string"
+					? t.trim().toLowerCase().replace(/^#/, "")
+					: ""
+			)
+			.filter((t) => t.length > 0);
+		this.settings.excludedTags = (this.settings.excludedTags || [])
 			.map((t) =>
 				typeof t === "string"
 					? t.trim().toLowerCase().replace(/^#/, "")
@@ -176,8 +192,6 @@ export default class MyPlugin extends Plugin {
 	// --- Combined Filter Helper ---
 	private passesFilters(file: TFile, cache: CachedMetadata | null): boolean {
 		if (!cache) return false;
-		const targetTags = this.settings.targetTags;
-		const mustCheckTags = targetTags.length > 0;
 		const frontmatter = cache.frontmatter;
 		const privacyRaw = parseFrontMatterEntry(frontmatter, "privacy");
 		const privacyValue =
@@ -205,18 +219,35 @@ export default class MyPlugin extends Plugin {
 			return false; // Failed privacy filter
 		}
 
-		// Check Tags (only if required and privacy passed)
-		if (mustCheckTags) {
-			const fileTagsRaw = getAllTags(cache) ?? [];
-			const fileTags = fileTagsRaw.map((tag) =>
-				tag.substring(1).toLowerCase()
-			); // Remove '#' and lowercase
-			const hasMatchingTag = fileTags.some((fileTag) =>
+		// Check Tags
+		const fileTagsRaw = getAllTags(cache) ?? [];
+		const fileTags = fileTagsRaw.map((tag) =>
+			tag.substring(1).toLowerCase()
+		);
+
+		// Check for Excluded Tags first - exclusion takes priority
+		const excludedTags = this.settings.excludedTags;
+		if (excludedTags.length > 0) {
+			const hasExcludedTag = fileTags.some((fileTag) =>
+				excludedTags.includes(fileTag)
+			);
+			if (hasExcludedTag) {
+				return false; // Exclude immediately if an excluded tag is found
+			}
+		}
+
+		// Then, check for Required Tags (if any are specified)
+		const targetTags = this.settings.targetTags;
+		if (targetTags.length > 0) {
+			const hasRequiredTag = fileTags.some((fileTag) =>
 				targetTags.includes(fileTag)
 			);
-			if (!hasMatchingTag) {
-				return false; // Failed tag filter
+			if (!hasRequiredTag) {
+				return false; // Exclude if a required tag is not found
 			}
+		} else {
+			// If no required tags are specified, the note passes the tag filter
+			// as long as it wasn't excluded.
 		}
 
 		// If we reach here, all filters passed
@@ -353,6 +384,11 @@ export default class MyPlugin extends Plugin {
 		}\n`;
 		combinedContentObj.content += `* Required Tags for Inclusion: ${
 			checkTags ? targetTags.map((t) => `#${t}`).join(", ") : "None"
+		}\n`;
+		combinedContentObj.content += `* Excluded Tags: ${
+			this.settings.excludedTags.length > 0
+				? this.settings.excludedTags.map((t) => `#${t}`).join(", ")
+				: "None"
 		}\n`;
 		// Add new settings to header
 		combinedContentObj.content += `* Include Recent Daily Notes: ${
@@ -867,6 +903,28 @@ class ContextSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.targetTags.join(", "))
 					.onChange(async (value) => {
 						this.plugin.settings.targetTags = value
+							.split(",")
+							.map((t) =>
+								t.trim().toLowerCase().replace(/^#/, "")
+							)
+							.filter((t) => t.length > 0);
+						await this.plugin.saveSettings();
+						this.updatePreviewStatus(); // Update preview status on change
+					})
+			);
+
+		// Excluded Tags
+		new Setting(containerEl)
+			.setName("Excluded Tags (Optional)")
+			.setDesc(
+				"If a note has one of these tags, it will be excluded, even if it also has a 'Required Tag'. Exclusion takes priority."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("archive, old (optional)")
+					.setValue(this.plugin.settings.excludedTags.join(", "))
+					.onChange(async (value) => {
+						this.plugin.settings.excludedTags = value
 							.split(",")
 							.map((t) =>
 								t.trim().toLowerCase().replace(/^#/, "")

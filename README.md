@@ -47,9 +47,13 @@ This plugin for Obsidian fetches context from your notes by traversing outgoing 
     -   Example: `public, internal, none`
 -   **Required Tags (Optional):**
     -   A comma-separated list of tags (without the leading `#`).
-    -   If tags are listed here, _all_ included notes (source and linked) must have at least _one_ of these tags _in addition to_ matching the privacy level filter.
-    -   Leave empty to only filter based on the `privacy` level.
+    -   If tags are listed here, a note must have at least one of these tags to be included.
+    -   If left empty, this filter is ignored, and notes will be included based on other criteria (like privacy and excluded tags).
     -   Example: `project-x, important-client`
+-   **Excluded Tags (Optional):**
+    -   A comma-separated list of tags to exclude.
+    -   If a note has a tag from this list, it will be excluded, **even if** it also has a tag from the **Required Tags** list. Exclusion takes priority over inclusion.
+    -   Example: `archive, low-priority`
 -   **Link Depth:**
     -   Determines how many levels of outgoing links to follow from the active note.
     -   `1` means only include the active note and notes directly linked from it.
