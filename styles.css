@@ -6,3 +6,111 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.tag-pills-container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 8px;
+	padding-left: 48px; /* Align with setting content */
+}
+
+.tag-pill {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	padding: 4px 8px;
+	font-size: 0.9em;
+	display: flex;
+	align-items: center;
+	cursor: default;
+}
+
+.tag-pill-remove {
+	margin-left: 6px;
+	cursor: pointer;
+	font-weight: bold;
+	color: var(--text-muted);
+}
+
+.tag-pill-remove:hover {
+	color: var(--text-normal);
+}
+
+/* Searchable Tag Input Styles */
+.tag-input-container {
+	position: relative;
+	width: 100%;
+}
+
+.tag-search-input {
+	width: 100%;
+}
+
+.tag-suggestions-container {
+	position: absolute;
+	width: 100%;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	margin-top: 4px;
+	z-index: 10;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+.tag-suggestion-item {
+	padding: 8px 12px;
+	cursor: pointer;
+}
+
+.tag-suggestion-item:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+/* Preview Styles */
+.context-preview-results {
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 1em;
+	padding-top: 1em;
+}
+
+.preview-status {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.preview-stale {
+	color: var(--text-warning);
+	font-weight: bold;
+}
+
+.preview-error {
+	color: var(--text-error);
+	font-weight: bold;
+}
+
+.preview-empty {
+	color: var(--text-muted);
+}
+
+.preview-included-list,
+.preview-excluded-list {
+	list-style-type: none;
+	padding-left: 1em;
+}
+
+.preview-included-list li::before {
+	content: "✅";
+	margin-right: 0.5em;
+}
+
+.preview-excluded-list li::before {
+	content: "❌";
+	margin-right: 0.5em;
+}
+
+.preview-note-depth {
+	color: var(--text-faint);
+	font-size: 0.9em;
+}

@@ -833,6 +833,25 @@ export default class MyPlugin extends Plugin {
 		});
 		return previewList;
 	}
+	// --- Helper: Get All Tags from Vault ---
+	getAllVaultTags(): string[] {
+		const allTags: Set<string> = new Set();
+		const files = this.app.vault.getMarkdownFiles();
+
+		for (const file of files) {
+			const cache = this.app.metadataCache.getFileCache(file);
+			if (cache) {
+				const tags = getAllTags(cache);
+				if (tags) {
+					tags.forEach((tag) => {
+						allTags.add(tag.substring(1).toLowerCase()); // Store without '#' and in lowercase
+					});
+				}
+			}
+		}
+
+		return Array.from(allTags).sort();
+	}
 } // End of MyPlugin class
 
 // --- SETTINGS TAB --- (Includes Preview Functionality)
@@ -891,49 +910,22 @@ class ContextSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Required Tags
-		new Setting(containerEl)
-			.setName("Required Tags (Optional)")
-			.setDesc(
-				"If tags are listed here (comma-separated, e.g., project-a, important), *ALL* included notes (source and linked) MUST have at least one of these tags *in addition to* matching the privacy level. Leave empty to ignore tags."
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("project-a, important (optional)")
-					.setValue(this.plugin.settings.targetTags.join(", "))
-					.onChange(async (value) => {
-						this.plugin.settings.targetTags = value
-							.split(",")
-							.map((t) =>
-								t.trim().toLowerCase().replace(/^#/, "")
-							)
-							.filter((t) => t.length > 0);
-						await this.plugin.saveSettings();
-						this.updatePreviewStatus(); // Update preview status on change
-					})
-			);
-
-		// Excluded Tags
-		new Setting(containerEl)
-			.setName("Excluded Tags (Optional)")
-			.setDesc(
-				"If a note has one of these tags, it will be excluded, even if it also has a 'Required Tag'. Exclusion takes priority."
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("archive, old (optional)")
-					.setValue(this.plugin.settings.excludedTags.join(", "))
-					.onChange(async (value) => {
-						this.plugin.settings.excludedTags = value
-							.split(",")
-							.map((t) =>
-								t.trim().toLowerCase().replace(/^#/, "")
-							)
-							.filter((t) => t.length > 0);
-						await this.plugin.saveSettings();
-						this.updatePreviewStatus(); // Update preview status on change
-					})
-			);
+		// --- TAGS UI ---
+		const allTags = this.plugin.getAllVaultTags();
+		this.createTagSetting(
+			containerEl,
+			"Required Tags (Optional)",
+			"If tags are listed here, notes MUST have at least one of these tags.",
+			"targetTags",
+			allTags
+		);
+		this.createTagSetting(
+			containerEl,
+			"Excluded Tags (Optional)",
+			"If a note has any of these tags, it will be excluded. Exclusion takes priority.",
+			"excludedTags",
+			allTags
+		);
 
 		// Link Depth Setting
 		new Setting(containerEl)
@@ -1130,6 +1122,101 @@ class ContextSettingTab extends PluginSettingTab {
 						}
 					})
 			);
+	}
+
+	// --- Helper: Create Searchable Tag Setting UI ---
+	private createTagSetting(
+		containerEl: HTMLElement,
+		name: string,
+		desc: string,
+		settingKey: "targetTags" | "excludedTags",
+		allTags: string[]
+	) {
+		const setting = new Setting(containerEl).setName(name).setDesc(desc);
+
+		// Create a container for the input and suggestions
+		const inputContainer = setting.controlEl.createDiv({
+			cls: "tag-input-container",
+		});
+
+		const textInput = inputContainer.createEl("input", {
+			type: "text",
+			placeholder: "Type to search for a tag...",
+			cls: "tag-search-input",
+		});
+
+		const suggestionsContainer = inputContainer.createDiv({
+			cls: "tag-suggestions-container",
+		});
+		suggestionsContainer.style.display = "none"; // Initially hidden
+
+		// --- Event Listener for Input ---
+		textInput.addEventListener("input", () => {
+			const filter = textInput.value.toLowerCase();
+			suggestionsContainer.empty();
+			if (filter) {
+				const filteredTags = allTags.filter(
+					(tag) =>
+						tag.toLowerCase().includes(filter) &&
+						!this.plugin.settings[settingKey].includes(tag)
+				);
+
+				if (filteredTags.length > 0) {
+					suggestionsContainer.style.display = "block";
+					filteredTags.slice(0, 10).forEach((tag) => {
+						// Limit to 10 suggestions
+						const suggestionEl = suggestionsContainer.createDiv({
+							text: tag,
+							cls: "tag-suggestion-item",
+						});
+						suggestionEl.addEventListener("click", async () => {
+							this.plugin.settings[settingKey].push(tag);
+							await this.plugin.saveSettings();
+							this.display(); // Redraw to show the new tag
+							this.updatePreviewStatus();
+						});
+					});
+				} else {
+					suggestionsContainer.style.display = "none";
+				}
+			} else {
+				suggestionsContainer.style.display = "none";
+			}
+		});
+
+		// --- Hide suggestions when clicking outside ---
+		textInput.addEventListener("blur", () => {
+			// Delay hiding to allow click event on suggestion to fire
+			setTimeout(() => {
+				suggestionsContainer.style.display = "none";
+			}, 150);
+		});
+		textInput.addEventListener("focus", () => {
+			// Show suggestions if there's already text
+			if (textInput.value) {
+				textInput.dispatchEvent(new Event("input"));
+			}
+		});
+
+		// --- Display selected tags as pills ---
+		const tagPillsContainer = containerEl.createDiv("tag-pills-container");
+		this.plugin.settings[settingKey].forEach((tag) => {
+			const pill = tagPillsContainer.createEl("div", {
+				text: tag,
+				cls: "tag-pill",
+			});
+			pill.createEl("span", {
+				text: " ⓧ",
+				cls: "tag-pill-remove",
+			}).onclick = async () => {
+				this.plugin.settings[settingKey] = this.plugin.settings[
+					settingKey
+				].filter((t) => t !== tag);
+				await this.plugin.saveSettings();
+				this.display(); // Redraw to remove the tag
+				this.updatePreviewStatus();
+			};
+		});
 	}
 
 	// --- Preview Helper Methods ---
